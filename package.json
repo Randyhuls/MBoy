@@ -1,0 +1,21 @@
+{
+  "name": "mboy",
+  "version": "1.0.0",
+  "description": "Web based Game Boy Color emulator",
+  "main": "dist/mboy.bundle.js",
+  "scripts": {
+    "dev": "webpack --config webpack.config.js",
+    "prod": "webpack --config webpack.prod.js",
+    "start-dev": "npm run dev; http-server -p 9876"
+  },
+  "author": "R.C.B. Huls",
+  "license": "ISC",
+  "devDependencies": {
+    "ts-loader": "^7.0.5",
+    "typescript": "^3.9.5",
+    "webpack": "^4.43.0",
+    "webpack-cli": "^3.3.12",
+    "webpack-merge": "^4.2.2",
+    "webpack-node-externals": "^1.7.2"
+  }
+}

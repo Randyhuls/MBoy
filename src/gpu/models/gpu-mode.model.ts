@@ -1,0 +1,10 @@
+const GPUMode = {
+    HORIZONTAL_BLANK: { MODE: 0, CLOCK: 204 },
+    VERTICAL_BLANK: { MODE: 1, CLOCK: 4560 },
+    SCANLINE_OAM: { MODE: 2, CLOCK: 80 },
+    SCANLINE_VRAM: { MODE: 3, CLOCK: 172 },
+    ONE_LINE: { MODE: null, CLOCK: 456 },
+    FULL_FRAME: { MODE: null, CLOCK: 70224 }
+}
+
+export { GPUMode }

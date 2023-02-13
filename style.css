@@ -1,0 +1,19 @@
+body {
+  margin: 0;
+  padding: 0;
+}
+
+main[data-app="mboy"] {
+  width: 100vw;
+  height: 100vh;
+  background-color: gainsboro;
+}
+
+main[data-app="mboy"] #__SCREEN__ {
+  position: absolute;
+  top: 40px;
+  left: 50%;
+  right: 50%;
+  transform: translateX(-50%);
+  border: 1px solid #000000;
+}
