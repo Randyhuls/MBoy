@@ -11,12 +11,13 @@ import { Debug } from './debug'
     // TODO: properly manage dependencies of various hardware (mmu, gpu, etc.)
     public async boot(): Promise<void> {
         // Load ROM
-        //await this.mmu.loadROMIntoMemory('tetris.gb')
+        // await this.mmu.loadROMIntoMemory('tetris.gb')
 
-        //await this.mmu.loadROMIntoMemory('testroms/cpu_instrs/cpu_instrs.gb')
-        //await this.mmu.loadROMIntoMemory('nintendo_bootrom.gb')
-        await this.mmu.loadROMIntoMemory('testroms/cpu_instrs/individual/01-special.gb')
+        // await this.mmu.loadROMIntoMemory('testroms/cpu_instrs/cpu_instrs.gb')
+        // await this.mmu.loadROMIntoMemory('nintendo_bootrom.gb')
 
+        // [maybe?] await this.mmu.loadROMIntoMemory('testroms/cpu_instrs/individual/01-special.gb')
+        await this.mmu.loadROMIntoMemory('testroms/cpu_instrs/individual/02-interrupts.gb')
         // [x] await this.mmu.loadROMIntoMemory('testroms/cpu_instrs/individual/03-op sp,hl.gb')
         // [x] await this.mmu.loadROMIntoMemory('testroms/cpu_instrs/individual/04-op r,imm.gb')
         // [x] await this.mmu.loadROMIntoMemory('testroms/cpu_instrs/individual/05-op rp.gb')

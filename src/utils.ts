@@ -1,31 +1,32 @@
-class Utils {
-    public static getSignedValue8(value: number = 0) {
-      return value >127 ? value =-((~value + 1) & 255) : value
+    export const getSignedValue8 = (value: number = 0) => {
+      return value >127 ? -((~value + 1) & 255) : value
     }
 
-    public static decToHex = (decimal: number): string => {
+    export const decToHex = (decimal: number): string => {
         return (decimal).toString(16)
     }
     
-    public static decToBin = (decimal: number) => {
+    export const decToBin = (decimal: number) => {
         return (decimal >>> 0).toString(2);
     }
     
-    public static binToDec = (binary: string): number => {
+    export const binToDec = (binary: string): number => {
         return parseInt(binary, 2)
     }
     
-    public static binToHex = (binary: string): string => {
+    export const binToHex = (binary: string): string => {
         return parseInt(binary, 2).toString(16)
     }
     
-    public static hexToBin = (hexadecimal: string): string => {
+    export const hexToBin = (hexadecimal: string): string => {
        return parseInt(hexadecimal, 16).toString(2) 
     }
     
-    public static hexToDec = (hexadecimal: string): number => {
+    export const hexToDec = (hexadecimal: string): number => {
         return parseInt(hexadecimal, 16)
     }
-}
 
-export { Utils }
+    export const formatHex = (value: number | string) => {
+      return value.toString(16).toUpperCase().padStart(2, '0');
+  }
+

@@ -1,4 +1,5 @@
 import { CPU } from '../cpu/cpu'
+import { Debug } from '../debug'
 import { GPU } from '../gpu/gpu'
 
 enum ICartridgeType {
@@ -34,7 +35,7 @@ enum ICartridgeType {
 
 interface IROMMetadata {
     title: string
-    nintendoLogo: Uint8Array
+    nintendoLogo: Uint8Array | null
     size: number
     version: number
     cartridgeType: ICartridgeType,
@@ -61,8 +62,8 @@ class MMU {
       0xF5, 0x06, 0x19, 0x78, 0x86, 0x23, 0x05, 0x20, 0xFB, 0x86, 0x20, 0xFE, 0x3E, 0x01, 0xE0, 0x50
     ])
 
-    public cpu: CPU // Set by CPU
-    public gpu: GPU // Set by mboy.ts
+    public cpu!: CPU // Set by CPU
+    public gpu!: GPU // Set by mboy.ts
 
     
     public bios: Uint8Array // Bios --> 256 bytes
@@ -75,7 +76,7 @@ class MMU {
     public WRAM: Uint16Array // Work RAM --> 4kb
     public VRAM: Uint16Array // Video RAM --> 16kb
 
-    private rawRomData: Uint16Array
+    private rawRomData!: Uint16Array
     private ROMBank: number = 0x4000 // Offset for ROM bank
     private RAMBank: number = 0x0000 // Offset for RAM bank
     private cartridgeType: number = 0x00 // MBC type
@@ -223,7 +224,7 @@ class MMU {
     }
 
     read(address: number): number {
-        if (address < 0x0000 || address > 0xFFFF) throw new Error(`Read attempt: Memory address ${address} is out of memory bounds`)
+        if (address < 0x0000 || address > 0xFFFF) throw new Error(`Read attempt: Memory address 0x${address.toString(16).toUpperCase()} is out of memory bounds`)
         
         if (address >= 0x0000 && address <= 0x3FFF) {
             if (!this.skipBios) {
@@ -291,12 +292,10 @@ class MMU {
             default:
               return 0
           }
-
-          //return this.IO[address - 0xFF00]
         } 
         
         else if (address >= 0xFF80 && address <= 0xFFFE) {
-          console.log('R: 0xFF80 - 0xFFFE --> High RAM (HRAM)', `0x${address.toString(16)}`)   
+          //console.log('R: 0xFF80 - 0xFFFE --> High RAM (HRAM)', `0x${address.toString(16)}`)   
           return this.HRAM[(address - 0xFF80) & 0x7F]
         } 
         
@@ -313,7 +312,7 @@ class MMU {
     public write(address: number, value: number): void {
       if (address === 0x81) console.log('output blargg:', address)
         //console.log('mmu address:', address, value)
-        if (address < 0x0000 || address > 0xFFFF) throw new Error(`Write attempt: Memory address ${address} is out of memory bounds`)
+        if (address < 0x0000 || address > 0xFFFF) throw new Error(`Write attempt: Memory address 0x${address.toString(16).toUpperCase()} is out of memory bounds`)
         
         if (address >= 0x0000 && address <= 0x3FFF) {
           if (!this.skipBios) {
@@ -336,12 +335,12 @@ class MMU {
         }  
         
         else if (address >= 0x8000 && address <= 0x9FFF) {
-            //console.log('W: 0x8000 - 0x9FFF --> 8kb VRAM (CGB mode, switchable)', `0x${address.toString(16)}`, value.toString(16))
+            console.log('W: 0x8000 - 0x9FFF --> 8kb VRAM (CGB mode, switchable)', `0x${address.toString(16)}`, value.toString(16))
             this.VRAM[address - 0x8000] = value
             
-            if (address <= 0x9000) {
+            if (address < 0x9000) {
                 this.VRAM[address & 0x1FFF - 0x8000] = value
-                this.gpu.updateTile(address, value)
+                this.gpu.updateTile(address & 0x1FFF - 0x8000, value)
             }
         } 
         
@@ -374,7 +373,16 @@ class MMU {
         } 
         
         else if (address >= 0xFF00 && address <= 0xFF7F) {
-            console.log('W: 0xFF00 - 0xFF7F --> I/O registers', `0x${address.toString(16)}`, value.toString(16))
+            //console.log('W: 0xFF00 - 0xFF7F --> I/O registers', `0x${address.toString(16)}`, value.toString(16))
+
+            if (address === 0xFF01 || address === 0xFF02) { // Serial transfer trigger
+              Debug.shared.readSerialOutput()
+            }
+
+            if (address === 0xFF40) {
+              console.log(`LCD Control Updated: ${value.toString(2)}`);
+
+            }
             switch (address & 0x00F0) {
               case 0x40:
               case 0x50:

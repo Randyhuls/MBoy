@@ -1,7 +1,7 @@
 import { CPU } from './cpu'
 import { MMU } from '../mmu/mmu'
 import { CPUClock, CPURegister, CPUFlag, CPUFlagType, CPURegisterType } from './models'
-import { Utils } from '../utils'
+import { getSignedValue8 } from '../utils'
 
 class Opcodes {
     private cpu: CPU
@@ -88,7 +88,7 @@ class Opcodes {
      * @param b 
      */
     private $isHalfCarry(a: number, b: number): boolean {
-        return (((a & 0xF) + (b & 0xF)) & 0x10) == 0x10
+      return (((a & 0xF) + (b & 0xF)) & 0x10) == 0x10
     }
     
     /**
@@ -97,7 +97,7 @@ class Opcodes {
      * @param b 
      */
     private $isCarry(a: number, b: number): boolean { 
-        return (((a & 0xFF) + (b & 0xFF)) & 0x70) == 0x70
+      return ((a + b) & 0x100) === 0x100;
     }
     
     /**
@@ -106,7 +106,7 @@ class Opcodes {
      * @param b 
      */
     private $isBit15Carry(a: number, b: number): boolean { 
-        return ((a & 0xFFFF) + (b & 0xFFFF)) > 0x7FFF
+      return ((a & 0xFFFF) + (b & 0xFFFF)) > 0x7FFF
     }
 
     /**
@@ -115,15 +115,15 @@ class Opcodes {
      * @param b 
      */
     private $isBit11Carry(a: number, b: number): boolean { 
-        return (((a & 0xFFFF) + (b & 0xFFFF)) & 0x0FFF) === 0x0FFF
+      return (((a & 0xFFFF) + (b & 0xFFFF)) & 0x0FFF) === 0x1000
     }
     
     private $isBit3Borrow(a: number, b: number): boolean { 
-        return this.$isHalfCarry(a, -b) 
+      return (a & 0x0F) < (b & 0x0F);
     }
 
     private $isBit4Borrow(a: number, b: number): boolean { 
-        return this.$isCarry(a, -b)
+      return ((a & 0x0F) - (b & 0x0F)) < 0;
     }
 
 
@@ -191,7 +191,7 @@ class Opcodes {
      * @param r1l Register 1 (low byte)
      */
     public LD_RR_SPd8(r1h: CPURegisterType, r1l: CPURegisterType) {
-        this.cpu.write16(this.r.SP + Utils.getSignedValue8(this.mmu.getImmediate8(this.r.PC)), r1h, r1l)
+        this.cpu.write16(this.r.SP + getSignedValue8(this.mmu.getImmediate8(this.r.PC)), r1h, r1l)
 
         this.$incClock(12)
         this.$incPC(2)
@@ -435,8 +435,8 @@ class Opcodes {
      * @param cycles Register
      */
     public RRC_R (r1: CPURegisterType, bytes: number, cycles: number) { 
-        const rightBit0: number = this.cpu.read8(r1) & 0x1
-        const v: number = (this.cpu.read8(r1) >> 1) | (rightBit0 << 7)
+        const rightBit0: number = this.cpu.read8(r1) & 0x01
+        const v: number = (this.cpu.read8(r1) >> 1) | ((rightBit0 & 0x01) << 7)
         this.cpu.write8(v, r1)  
 
         // Flags
@@ -634,7 +634,7 @@ class Opcodes {
      * @description Add the contents of the 8-bit signed (2's complement) immediate operand s8 and the stack pointer SP and store the results in SP
      */
     public ADD_SP_d8(): void {
-        const v: number = (Utils.getSignedValue8(this.mmu.getImmediate8(this.r.PC)) + this.r.SP) & 0xFF
+        const v: number = (getSignedValue8(this.mmu.getImmediate8(this.r.PC)) + this.r.SP) & 0xFF
         this.r.SP = v
 
         this.$resetF(CPUFlagType.Z)
@@ -876,7 +876,7 @@ class Opcodes {
 
         this.$setF(CPUFlagType.Z, !newV)
         this.$setF(CPUFlagType.N, 1)
-        this.$setF(CPUFlagType.H, (!this.$isBit4Borrow(v, 1))) 
+        this.$setF(CPUFlagType.H, this.$isBit4Borrow(v, 1))
 
         this.cpu.write8(newV, r1)
 
@@ -968,7 +968,7 @@ class Opcodes {
     public JR(): void {
         this.$incClock(12)
 
-        const s8: number = Utils.getSignedValue8(this.mmu.getImmediate8(this.r.PC)) // Signed 8-bit value
+        const s8: number = getSignedValue8(this.mmu.getImmediate8(this.r.PC)) // Signed 8-bit value
         this.$incPC(s8)
     }
 
@@ -978,13 +978,48 @@ class Opcodes {
     public JR_NF(flag: CPUFlagType): void {
         if (this.$getF(flag)) {
           this.$incClock(8)
-          this.$incPC(1)
+          this.$incPC(2)
         } else {
-          const s8: number = Utils.getSignedValue8(this.mmu.getImmediate8(this.r.PC + 1)) // Signed 8-bit value
+          const s8: number = getSignedValue8(this.mmu.getImmediate8(this.r.PC + 1)) // Signed 8-bit value
           this.$incClock(12)
           this.$incPC(2 + s8) // takes 2 bytes to process; then jump to s8
         }
     }
+
+    // JRNZn () { 
+    //   var i=MMU.rb(Z80._r.pc); 
+
+    //   if(i>127) i=-((~i+1)&255); 
+
+    //   Z80._r.pc++; 
+    //   Z80._r.m=2; 
+
+    //   if((Z80._r.f&0x80)==0x00) { 
+    //     Z80._r.pc+=i; 
+    //     Z80._r.m++; 
+    //   } 
+    // }
+
+    // JRn (p) {
+    //  var v=p.memory.rb(p.r.pc++)
+
+    //  v=GameboyJS.Util.getSignedValue(v);
+    // 
+    //  p.r.pc += v;
+    //  p.clock.c += 12;
+    // }
+
+
+
+  //  public _ (p) {
+  //     var v=p.memory.rb(p.r.pc++);
+
+  //     v=GameboyJS.Util.getSignedValue(v);
+
+  //     p.r.pc += v;
+  //     p.clock.c += 12;
+  //   }
+
 
     /**
      * @description Jump n (8-bit signed value) steps from current address if F (flag, e.g. Z, C) is 1
@@ -994,7 +1029,7 @@ class Opcodes {
           this.$incClock(8)
           this.$incPC(2)
         } else {
-          const s8: number = Utils.getSignedValue8(this.mmu.getImmediate8(this.r.PC + 1)) // Signed 8-bit value
+          const s8: number = getSignedValue8(this.mmu.getImmediate8(this.r.PC + 1)) // Signed 8-bit value
           this.$incClock(12)
           this.$incPC(2 + s8)
         }
@@ -1300,13 +1335,47 @@ class Opcodes {
      * The contents of the address specified by the new SP value are then loaded in the higher-order byte of PC, and the contents of SP are incremented by 1 again. 
      * (The value of SP is 2 larger than before instruction execution.) The next instruction is fetched from the address specified by the content of PC (as usual)
      */
-    public RET(): void {
-        const v: number = this.mmu.getImmediate16(this.r.SP)
-        this.cpu.register.PC = v
+    // public RET(): void {
+    //     // console.log(`SP before RET: 0x${this.r.SP.toString(16)}`);
+    //     // console.log('SP at 0xFF40', this.mmu.getImmediate16(0xFF40))
+    //     const v: number = this.mmu.getImmediate16(this.r.SP)
+    //     //console.log('RET -> value ->', v);
+    //     this.cpu.register.PC = v
+    //     //console.log('RET -> PC ->', this.cpu.register.PC);
+    //     this.r.SP += 2
+    //     this.$incClock(16)
 
-        this.r.SP += 2
-        this.$incClock(16)
-    }
+    //     // this.r.PC = this.mmu.getImmediate16(this.r.PC); 
+    //     // this.r.SP += 2; 
+    //     // this.$incClock(9);
+    // }
+
+    // _ret() {
+    //   p.r.pc = p.memory.rb(p.r.sp);
+    //   p.wr('sp', p.r.sp+1);
+    //   p.r.pc += p.memory.rb(p.r.sp)<<8;
+    //   p.wr('sp', p.r.sp+1);
+    //   p.clock.c += 16;
+    // }
+    public RET(): void {
+      // Pop the lower byte of the return address from the stack
+      const lowByte = this.mmu.read(this.r.SP);
+      this.r.SP++;
+  
+      // Pop the higher byte of the return address from the stack
+      const highByte = this.mmu.read(this.r.SP);
+      this.r.SP++;
+  
+      // Combine the two bytes to form the return address
+      const returnAddress = (highByte << 8) | lowByte;
+  
+      // Set the PC to the return address
+      this.cpu.register.PC = returnAddress;
+  
+      // Increment the clock cycles
+      this.$incClock(16);
+  }
+
 
     /**
      * @description Used when an interrupt-service routine finishes. The address for the return from the interrupt is loaded in the program counter PC. The master interrupt enable flag is returned to its pre-interrupt status.
@@ -1346,13 +1415,36 @@ class Opcodes {
      */
     public RET_NF(flag: CPUFlagType): void {
         if (!this.$getF(flag)) {
-            this.r.PC = this.mmu.read(this.r.SP)
-            this.r.SP += 2
-        }
+          const lowByte = this.mmu.read(this.r.SP);
+          this.r.SP++;
 
-        this.$incClock(8)
-        this.$incPC(2)
+          const highByte = this.mmu.read(this.r.SP);
+          this.r.SP++;
+
+          this.r.PC = (highByte << 8) | lowByte;
+
+          this.$incClock(20)
+        } else {
+          this.$incClock(8)
+          this.$incPC(2)
+        }        
     }
+
+    // _RET_NF (p, cc) {
+    //   if (GameboyJS.Util.testFlag(p, cc)){
+    //     p.r.pc = p.memory.rb(p.r.sp);
+
+    //     p.wr('sp', p.r.sp+1);
+
+    //     p.r.pc+=p.memory.rb(p.r.sp)<<8;
+
+    //     p.wr('sp', p.r.sp+1);
+    //     p.clock.c+=12;
+    //   }
+      
+    //   p.clock.c+=8;
+    // }
+
 
     /**
      * @description Reset bit 0 in register r1 to 0.

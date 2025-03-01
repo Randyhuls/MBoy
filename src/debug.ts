@@ -2,8 +2,8 @@ import { MMU } from './mmu/mmu'
 
 class Debug {
   private static _shared: Debug
-  public debugging: boolean = false
-  public mmu: MMU // Set by mboy.ts
+  public debugging: boolean = true
+  public mmu!: MMU // Set by mboy.ts
 
   public serialOutput: { entries: string[], str: string } = {
     entries: [],
@@ -20,7 +20,7 @@ class Debug {
     const output: string = entries[entries.length-1]
     const char = this.mmu.read(0xFF01)
     const endOfLine = this.mmu.read(0xFF02) === 0x81
-
+    
     if (char) this.serialOutput.str += String.fromCharCode(char)
     if (endOfLine) {
       this.serialOutput.entries.push(this.serialOutput.str)

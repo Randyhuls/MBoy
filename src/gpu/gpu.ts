@@ -11,8 +11,8 @@ class GPU {
     private static _shared: GPU
 
     // Set by mboy.ts
-    public cpu: CPU 
-    public mmu: MMU 
+    public cpu!: CPU 
+    public mmu!: MMU 
     
     private mode: number = 0
     private modeClock: number = 0
@@ -23,28 +23,28 @@ class GPU {
     private scale: number
     private canvas: HTMLCanvasElement
     private context: CanvasRenderingContext2D
-    private screen: ImageData
-    private tileset = []
+    private screen!: ImageData
+    private tileset: Record<number, number[][]> = {}
 
     private switchBG: boolean = false
-    private switchLCD: boolean = false
+    private switchLCD: boolean = true
     private bgMap: boolean = false
     private bgTile: boolean = false
 
-    private palette = {
-        0: [255, 255, 255],
-        1: [192, 192, 192],
-        2: [96, 96, 96],
-        3: [0, 0, 0]
+    private palette: Record<number, number[]> = {
+        0: [255, 255, 255, 255],
+        1: [192, 192, 192, 255],
+        2: [96, 96, 96, 255],
+        3: [0, 0, 0, 255]
     }
 
     constructor(scale: number = GPUSettings.SCALE) {
         // CANVAS & CONTEXT
         this.scale = scale
-        this.canvas = document.querySelector('main[data-app="mboy"] > canvas[id="__SCREEN__"]')
+        this.canvas = document.querySelector('main[data-app="mboy"] > canvas[id="__SCREEN__"]')!
         this.canvas.width = GPUSettings.WIDTH * this.scale
         this.canvas.height = GPUSettings.HEIGHT * this.scale
-        this.context = this.canvas.getContext('2d')
+        this.context = this.canvas.getContext('2d')!
 
         this.reset() // Clear or create new array of pixels
     }
@@ -55,9 +55,15 @@ class GPU {
     }
 
     read(address: number) {
-      console.log('gpu read!')
+      console.log('gpu read!', `0x${address.toString(16)}`)
       switch(address) {
         case 0xFF40: 
+          console.log('gpu:',
+            (this.switchBG  ? 0x01 : 0x00) | 
+            (this.bgMap     ? 0x08 : 0x00) | 
+            (this.bgTile    ? 0x10 : 0x00) | 
+            (this.switchLCD ? 0x80 : 0x00)
+          )
           return (
             (this.switchBG  ? 0x01 : 0x00) | 
             (this.bgMap     ? 0x08 : 0x00) | 
@@ -71,12 +77,13 @@ class GPU {
         case 0xFF44:
           return this.line
         default:
-          console.log('Unknown address passed to GPU read function;', `0x${address.toString(16)}`) 
+          return 0x00;
+          //console.log('Unknown address passed to GPU read function;', `0x${address.toString(16)}`) 
       }
     }
 
     write(address: number, value: number) {
-      console.log('gpu write!')
+      console.log('gpu write!', `0x${address.toString(16)}`)
       switch(address) {
         case 0xFF40:
             this.switchBG   = !!(value & 0x01)
@@ -91,7 +98,7 @@ class GPU {
           this.scX = value
            break
         case 0xFF47:
-          for(let i = 0; i < 4; i++) {
+          for(let i = 0; i < Object.keys(this.palette).length; i++) {
             switch((value >> (i * 2)) & 3) {
               case 0: 
                 this.palette[i] = [255, 255, 255, 255]
@@ -112,6 +119,12 @@ class GPU {
       }
     }
 
+    renderFrame() {
+      //console.log('render frame!')
+      //console.log(this.screen.data.slice(0, 100))
+      this.context.putImageData(this.screen, 0, 0)
+    }
+
     tick() {
         this.modeClock = this.cpu.clock.M
 
@@ -123,8 +136,7 @@ class GPU {
                     // If we're at the last horizontal line, we enter vblank
                     if (this.line == GPUSettings.HEIGHT - 1) {
                         this.mode = GPUMode.VERTICAL_BLANK.MODE
-                        console.log('screen (2)', this.screen)
-                        this.context.putImageData(this.screen, 0, 0)
+                        this.renderFrame();
                     } else {
                         this.mode = GPUMode.SCANLINE_OAM.MODE
                     }
@@ -175,10 +187,9 @@ class GPU {
         }
 
         this.context.putImageData(this.screen, 0, 0)
-        
 
         // Clear video ram and sprite attribute table
-        this.tileset = []
+        this.tileset = {}
 
         for (let i = 0; i < this.MAX_NR_OF_TILES; i++) {
             // Clear each sprite
@@ -191,22 +202,22 @@ class GPU {
     }
 
     updateTile(address: number, value: number) {
-        const addr: number = address & 0x1FFE
-        console.log('updateTile:', address, value)
-        // Get updated tile and row
-        const tile: number =  (addr >> 4) & 511
-        const y: number = (addr >> 1) & 7
+      const addr: number = address & 0x1FFE
+      
+      // Get updated tile and row
+      const tile: number =  (addr >> 4) & 511
+      const y: number = (addr >> 1) & 7
 
-        let sx: number
+      let sx: number
 
-        // Loop through sprite tile
-        for (let x = 0; x < 8; x++) {
-            // Bit index for current pixels
-            sx = 1 << (7 - x)
+      // Loop through sprite tile
+      for (let x = 0; x < 8; x++) {
+          // Bit index for current pixels
+          sx = 1 << (7 - x)
 
-            // Update tile set
-            this.tileset[tile][y][x] = ((this.mmu.VRAM[addr] & sx) ? 1 : 0) + ((this.mmu.VRAM[addr + 1] & sx) ? 2 : 0)
-        }
+          // Update tile set
+          this.tileset[tile][y][x] = ((this.mmu.VRAM[addr] & sx) ? 1 : 0) + ((this.mmu.VRAM[addr + 1] & sx) ? 2 : 0)
+      }
     }
 
     private renderScan(){
@@ -220,24 +231,29 @@ class GPU {
         let lineOffset = (this.scX >> 3)
 
         // Which line of pixels to use in the tiles
-        var y = (this.line + this.scY) & 7
+        let y = (this.line + this.scY) & 7
 
         // Where in the tileline to start
-        var x = this.scX & 7
+        let x = this.scX & 7
 
         // Where to render on the canvas
-        var canvasOffset = this.line * 160 * 4
+        let canvasOffset = this.line * 160 * 4
     
         // Read tile index from the background map
-        let color: number
+        let color: number[]
         let tile = this.mmu.VRAM[mapOffset + lineOffset];
 
         // If the tile data set in use is #1, the
         // indices are signed; calculate a real tile offset
         if (this.bgTile && tile < 128) tile += 256
 
-        for(var i = 0; i < 160; i++) {
+        for(let i = 0; i < 160; i++) {
             // Re-map the tile pixel through the palette
+            // console.log('this.palette', this.palette)
+            // console.log('tile', tile)
+            // console.log('y', y)
+            // console.log('x', x)
+            // console.log('this.tileset[tile]', this.tileset[tile])
             color = this.palette[this.tileset[tile][y][x]]
 
             // Plot the pixel to canvas
@@ -246,7 +262,7 @@ class GPU {
             this.screen.data[canvasOffset + 2] = color[2]
             this.screen.data[canvasOffset + 3] = color[3]
             canvasOffset += 4
-
+            
             // When this tile ends, read another
             x++
             if(x == 8) {
